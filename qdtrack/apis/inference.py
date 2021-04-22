@@ -151,3 +151,11 @@ def show_result_pyplot(model,
         win_name=title,
         bbox_color=(72, 101, 241),
         text_color=(72, 101, 241))
+
+model = init_model('/home/erdos/workspace/qdtrack/configs/qdtrack-frcnn_r50_fpn_12e_bdd100k.py', checkpoint='/home/erdos/workspace/qdtrack/qdtrack-frcnn_r50_fpn_12e_bdd100k-13328aed.pth')
+images = os.listdir('/home/erdos/workspace/S0')
+images_f = ['/home/erdos/workspace/S0/' + f for f in images][5]
+
+res = inference_model(model, [images_f, images_f])
+bbox_result, _ = res.values()
+show_result_pyplot(model, images_f, bbox_result)
