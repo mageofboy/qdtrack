@@ -52,7 +52,7 @@ def init_model(config, checkpoint=None, device='cuda:0', cfg_options=None):
     return model
 
 
-def inference_model(model, imgs, frame_id=0, out_dir=None):
+def inference_model(model, imgs, frame_id=0, filename=None, out_dir=None):
     """Inference image(s) with the detector.
 
     Args:
@@ -83,11 +83,11 @@ def inference_model(model, imgs, frame_id=0, out_dir=None):
 
     datas = []
     for i, img in enumerate(imgs):
-        curr_frame_id = i if is_batch else frame_id
+        curr_frame_id = (i+frame_id) if is_batch else frame_id
         # prepare data
         if isinstance(img, np.ndarray):
             # directly add img
-            data = dict(img=img, frame_id=curr_frame_id)
+            data = dict(img=img, frame_id=curr_frame_id,img_info=dict(filename=filename))
         else:
             # add information into dict
             data = dict(img_info=dict(filename=img), img_prefix=None, frame_id=curr_frame_id)
@@ -96,10 +96,14 @@ def inference_model(model, imgs, frame_id=0, out_dir=None):
         data = test_pipeline(data)
         datas.append(data)
 
+
     data = collate(datas, samples_per_gpu=len(imgs))
     # just get the actual data from DataContainer
+    
     data['img_metas'] = [img_metas.data[0] for img_metas in data['img_metas']]
     data['img'] = [img.data[0] for img in data['img']]
+#    import pdb
+#    pdb.set_trace()
     if next(model.parameters()).is_cuda:
         # scatter to specified GPU
         data = scatter(data, [device])[0]
@@ -111,11 +115,10 @@ def inference_model(model, imgs, frame_id=0, out_dir=None):
 
     # forward the model
     with torch.no_grad():
-        results = model(return_loss=False, rescale=True, **data)
         assert out_dir != None
         model.extract_feats(out_dir,**data)
 
-    return results
+    # return results
 
 
 def show_result_pyplot(model,
