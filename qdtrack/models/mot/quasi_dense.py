@@ -68,7 +68,9 @@ class QuasiDenseFasterRCNN(TwoStageDetector):
         return losses
     @auto_fp16(apply_to=('img', ))
     def extract_feats(self,out_dir,img,img_metas):
-        img,img_metas = img[0].data[0], img_metas[0].data[0]
+        import pdb
+        pdb.set_trace()
+        img,img_metas = img[0], img_metas[0]
         for i in range(len(img_metas)):
             dir_path = out_dir + "/" + img_metas[i].get('ori_filename').split('.')[0].split('/')[0]
             fname = img_metas[i].get('ori_filename').split('.')[0].split('/')[1] + ".pkl"

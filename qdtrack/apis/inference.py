@@ -52,7 +52,7 @@ def init_model(config, checkpoint=None, device='cuda:0', cfg_options=None):
     return model
 
 
-def inference_model(model, imgs, frame_id=0):
+def inference_model(model, imgs, frame_id=0, out_dir=None):
     """Inference image(s) with the detector.
 
     Args:
@@ -112,6 +112,8 @@ def inference_model(model, imgs, frame_id=0):
     # forward the model
     with torch.no_grad():
         results = model(return_loss=False, rescale=True, **data)
+        assert out_dir != None
+        model.extract_feats(out_dir,**data)
 
     return results
 
