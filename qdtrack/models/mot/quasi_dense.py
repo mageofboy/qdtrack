@@ -75,8 +75,10 @@ class QuasiDenseFasterRCNN(TwoStageDetector):
             mkdir_or_exist(dir_path)
             with open( "/".join([dir_path , fname]), "wb") as f:
                 output = {"img_metas": img_metas[i],
-                            "at_neck": self.extract_feat(img[i].cuda().unsqueeze(0)), 
-                            "at_backbone": self.backbone(img[i].cuda().unsqueeze(0))
+                            "at_neck": tuple(tensor.cpu().numpy()
+                                for tensor in self.extract_feat(img[i].cuda().unsqueeze(0))), 
+                            "at_backbone": tuple(tensor.cpu().numpy()
+                                for tensor in self.backbone(img[i].cuda().unsqueeze(0)))
                 }
                 pickle.dump(output,f)
     def simple_test(self, img, img_metas, rescale=False):
