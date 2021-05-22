@@ -74,12 +74,22 @@ class QuasiDenseFasterRCNN(TwoStageDetector):
             fname = img_metas[i].get('ori_filename').split('.')[0].split('/')[1] +"_"+ str(img_metas[i].get('frame_id'))+ ".pkl"
             mkdir_or_exist(dir_path)
             with open( "/".join([dir_path , fname]), "wb") as f:
+                at_backbone_layers = [tensor.cpu().numpy()
+                                for tensor in self.backbone(img[i].cuda().unsqueeze(0))]
+                
+                at_backbone_masked = [None for i in at_backbone_layers]
+                at_backbone_masked[-1] = at_backbone_layers[-1]
+                
+                at_neck_layers = [tensor.cpu().numpy()
+                                for tensor in self.extract_feat(img[i].cuda().unsqueeze(0))]
+                
+                at_neck_masked = [None for i in at_neck_layers]
+                at_neck_masked[-1] = at_neck_layers[-1]
+                at_neck_masked[-2] = at_neck_layers[-2]
+
                 output = {"img_metas": img_metas[i],
-                            "at_neck": tuple(tensor.cpu().numpy()
-                                for tensor in self.extract_feat(img[i].cuda().unsqueeze(0))), 
-                            "at_backbone": tuple(tensor.cpu().numpy()
-                                for tensor in self.backbone(img[i].cuda().unsqueeze(0)))
-                }
+                            "at_neck": at_neck_masked, 
+                            "at_backbone": tuple(at_backbone_masked)                }
                 pickle.dump(output,f)
     def simple_test(self, img, img_metas, rescale=False):
         # TODO inherit from a base tracker
