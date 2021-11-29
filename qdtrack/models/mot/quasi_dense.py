@@ -11,8 +11,10 @@ from mmcv import mkdir_or_exist
 @MODELS.register_module()
 class QuasiDenseFasterRCNN(TwoStageDetector):
 
-    def __init__(self, tracker=None, *args, **kwargs):
+    def __init__(self, tracker=None, efficient_det=None, *args, **kwargs):
         self.prepare_cfg(kwargs)
+        if efficient_det:
+            kwargs['roi_head']['efficient_det_cfg'] = efficient_det
         super().__init__(*args, **kwargs)
         self.tracker_cfg = tracker
 
@@ -90,7 +92,7 @@ class QuasiDenseFasterRCNN(TwoStageDetector):
         x = self.extract_feat(img)
         proposal_list = self.rpn_head.simple_test_rpn(x, img_metas)
         det_bboxes, det_labels, track_feats = self.roi_head.simple_test(
-            x, img_metas, proposal_list, rescale)
+            x, img, img_metas, proposal_list, rescale)
 
         if track_feats is not None:
             bboxes, labels, ids = self.tracker.match(

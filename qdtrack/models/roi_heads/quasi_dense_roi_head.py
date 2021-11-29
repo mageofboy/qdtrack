@@ -2,8 +2,8 @@ import torch
 from mmdet.core import bbox2roi, build_assigner, build_sampler
 from mmdet.models import HEADS, build_head, build_roi_extractor
 from mmdet.models.roi_heads import StandardRoIHead
-
-
+import tensorflow as tf
+import numpy as np
 @HEADS.register_module()
 class QuasiDenseRoIHead(StandardRoIHead):
 
@@ -11,6 +11,7 @@ class QuasiDenseRoIHead(StandardRoIHead):
                  track_roi_extractor=None,
                  track_head=None,
                  track_train_cfg=None,
+                 efficient_det_cfg=None,
                  *args,
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -19,6 +20,47 @@ class QuasiDenseRoIHead(StandardRoIHead):
             self.init_track_head(track_roi_extractor, track_head)
             if self.track_train_cfg:
                 self.init_track_assigner_sampler()
+        self._signitures = {
+            'image_files': 'image_files:0',
+            'image_arrays': 'image_arrays:0',
+            'prediction': 'detections:0',
+        }
+        if efficient_det_cfg:
+            self._model_name, self._tf_session = self.load_serving_model(efficient_det_cfg['type'], efficient_det_cfg['model_path'])
+
+    def load_serving_model(self, model_name, model_path):
+        detection_graph = tf.Graph()
+        with detection_graph.as_default():
+            # Load a frozen graph.
+            graph_def = tf.GraphDef()
+            with tf.gfile.GFile(model_path, 'rb') as f:
+                graph_def.ParseFromString(f.read())
+                tf.import_graph_def(graph_def, name='')
+        gpu_options = tf.GPUOptions(
+            allow_growth=True,
+            visible_device_list=str(0))
+        return model_name, tf.Session(
+            graph=detection_graph,
+            config=tf.ConfigProto(gpu_options=gpu_options))
+
+    def efficient_det_predict(self, inputs, img_metas, rescale):
+        img_meta = img_metas[0]
+        img_norm = img_meta['img_norm_cfg']
+        inputs = inputs * torch.from_numpy(img_norm['std'].reshape((1, -1, 1, 1))).to(inputs.device) + \
+            torch.from_numpy(img_norm['mean'].reshape((1, -1, 1, 1))).to(inputs.device)
+        img = inputs[0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu().numpy()
+        # (w_scale, h_scale, w_scale, h_scale)
+        scale_factors = img_meta['scale_factor']
+        outputs_np = self._tf_session.run(
+            self._signitures['prediction'],
+            feed_dict={self._signitures['image_arrays']: [img]})[0]
+        # _, ymin, xmin, ymax, xmax, score, _class
+        outputs_np = outputs_np[~(outputs_np[:, 5]==0)]
+        bboxes = outputs_np[:, 1:6][:, [1, 0, 3, 2, 4]]
+        if rescale:
+            bboxes[:, :4] /= scale_factors
+        labels = outputs_np[:, 6] - 1
+        return [torch.from_numpy(bboxes).to(inputs.device)], [torch.from_numpy(labels).to(inputs.device)]
 
     def init_track_assigner_sampler(self):
         """Initialize assigner and sampler."""
@@ -134,9 +176,11 @@ class QuasiDenseRoIHead(StandardRoIHead):
         track_feats = self.track_head(track_feats)
         return track_feats
 
-    def simple_test(self, x, img_metas, proposal_list, rescale):
-        det_bboxes, det_labels = self.simple_test_bboxes(
-            x, img_metas, proposal_list, self.test_cfg, rescale=rescale)
+    def simple_test(self, x, img, img_metas, proposal_list, rescale):
+        # img.shape = [batch, channel, height, width]
+        # det_bboxes, det_labels = self.simple_test_bboxes(
+        #     x, img_metas, proposal_list, self.test_cfg, rescale=rescale)
+        det_bboxes, det_labels = self.efficient_det_predict(img, img_metas, rescale=rescale)
 
         # TODO: support batch inference
         det_bboxes = det_bboxes[0]
